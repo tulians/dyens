@@ -4,30 +4,18 @@
 
 # Built-in modules
 import time
-import urllib
 import argparse
 from urllib.parse import urljoin
 from urllib.error import URLError
-from itertools import filterfalse
 from urllib.request import urlopen
 from html.parser import HTMLParser
 from http.client import BadStatusLine
 
 
-avoid = ["facebook", "youtube", "twitter", "t.co", ".pptx", ".ppt", ".xls",
-         ".xlsx", ".xml", ".xlt", ".pdf", ".jpg", ".png", ".svg", ".doc",
-         ".docx", "play.google", "goo.gl", "mailto:", ".pps", "javascript:"]
-
 parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
 parser.add_argument("start_url", help="Base URL to start crawling from.")
 parser.add_argument("words", nargs="*", help="Words to look for.")
 args = parser.parse_args()
-
-
-def analyse_resource_extension(url):
-    """Returns whether the given url has an extension to avoid."""
-    match = [ext in url for ext in avoid]
-    return any(element is True for element in match)
 
 
 class LinksGetter(HTMLParser):
@@ -68,11 +56,6 @@ def crawler(words, start_url, max_pages=1000000):
         pages_to_visit = pages_to_visit[1:]
         previous_time = time.time()
         data, links = parser.get_links(current_url)
-        # Avoid asking for non-HTML resources.
-        # Alternative:
-        # links = list(filter(
-        #    lambda x: analyse_resource_extension(x) is False, links))
-        links = list(filterfalse(analyse_resource_extension, links))
         # Process elapsed time.
         previous_time = time.time() - previous_time
         minutes, seconds = divmod((time.time() - search_start_time), 60)
