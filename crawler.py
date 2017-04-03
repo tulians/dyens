@@ -8,6 +8,7 @@ import urllib
 import argparse
 from urllib.parse import urljoin
 from urllib.error import URLError
+from itertools import filterfalse
 from urllib.request import urlopen
 from html.parser import HTMLParser
 from http.client import BadStatusLine
@@ -15,20 +16,22 @@ from http.client import BadStatusLine
 
 avoid = ["facebook", "youtube", "twitter", "t.co", ".pptx", ".ppt", ".xls",
          ".xlsx", ".xml", ".xlt", ".pdf", ".jpg", ".png", ".svg", ".doc",
-         ".docx", "play.google", "goo.gl", "mailto:", ".pps"]
+         ".docx", "play.google", "goo.gl", "mailto:", ".pps", "javascript:"]
 
 parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
 parser.add_argument("start_url", help="Base URL to start crawling from.")
-parser.add_argument("words", help="Words to look for.")
+parser.add_argument("words", nargs="*", help="Words to look for.")
 args = parser.parse_args()
 
 
 def analyse_resource_extension(url):
+    """Returns whether the given url has an extension to avoid."""
     match = [ext in url for ext in avoid]
     return any(element is True for element in match)
 
 
-class LinkParser(HTMLParser):
+class LinksGetter(HTMLParser):
+    """Returns an HTML file along with the URLs in it."""
     def handle_starttag(self, tag, attrs):
         if tag == "a":
             for (key, value) in attrs:
@@ -56,18 +59,20 @@ class LinkParser(HTMLParser):
 
 
 def crawler(words, start_url, max_pages=1000000):
+    """Performs web crawling, returning the site that holds the words."""
     pages_to_visit, number_visited, previous_time = [start_url], 0, 0
-    pages_seen = set(pages_to_visit)
-    parser = LinkParser()
+    pages_seen, parser = set(pages_to_visit), LinksGetter()
     search_start_time = time.time()
     while number_visited < max_pages and pages_to_visit:
         current_url = pages_to_visit[0]
         pages_to_visit = pages_to_visit[1:]
         previous_time = time.time()
         data, links = parser.get_links(current_url)
-        # Avoid asking for non-HTML resources or HTML of humongous size.
-        links = list(filter(
-            lambda x: analyse_resource_extension(x) is False, links))
+        # Avoid asking for non-HTML resources.
+        # Alternative:
+        # links = list(filter(
+        #    lambda x: analyse_resource_extension(x) is False, links))
+        links = list(filterfalse(analyse_resource_extension, links))
         # Process elapsed time.
         previous_time = time.time() - previous_time
         minutes, seconds = divmod((time.time() - search_start_time), 60)
@@ -93,7 +98,6 @@ def crawler(words, start_url, max_pages=1000000):
 
 if __name__ == '__main__':
     if args.start_url and args.words:
-        words = [args.words]
-        crawler(words, args.start_url)
+        crawler(args.words, args.start_url)
     else:
         print("Not enough arguments.")
