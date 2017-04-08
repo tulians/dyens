@@ -8,6 +8,7 @@ import sys
 import json
 import time
 import argparse
+from os import path
 from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -29,6 +30,9 @@ class LinkContentParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
         self.sites_content = {}
+        if not path.isfile(args.path):
+            with open(args.path, "w") as f:
+                f.write(json.dumps(self.sites_content))
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -44,9 +48,9 @@ class LinkContentParser(HTMLParser):
                 self.sites_content[self.base_url] = tag
             else:
                 self.sites_content[self.base_url] += " " + tag
-            if sys.getsizeof(self.sites_content) > 10e6:
-                dump(self.sites_content, args.path)
-                self.sites_content = None
+            if sys.getsizeof(self.sites_content) > 10e3:
+                self.dump(self.sites_content, args.path)
+                self.sites_content = {}
 
     def get_links(self, url):
         self.links = []
@@ -67,6 +71,14 @@ class LinkContentParser(HTMLParser):
         else:
             return ("", [])
 
+    def dump(self, data, path):
+        with open(path, "r") as f:
+            d = json.load(f)
+        with open(path, "w") as f:
+            # BUG: when same key exists in both dicts.
+            d = {**d, **data}
+            f.write(json.dumps(d))
+
 
 def crawler(words, start_url, max_pages=10000, display=True):
     """Performs web crawling, returning the site that holds the words."""
@@ -75,6 +87,7 @@ def crawler(words, start_url, max_pages=10000, display=True):
     search_start_time = time.time()
     while number_visited < max_pages and pages_to_visit:
         current_url = pages_to_visit[0]
+        print("Visiting", current_url)
         pages_to_visit = pages_to_visit[1:]
         # Measure how much time it takes to get page links.
         previous_time = time.time()
@@ -88,7 +101,8 @@ def crawler(words, start_url, max_pages=10000, display=True):
                   "| #", number_visited, "- Visited:", current_url, "in",
                   "{0:.5f}".format(previous_time), "seconds. Set size:",
                   sys.getsizeof(pages_seen), "bytes.", len(pages_to_visit),
-                  "sites pending to visit.")
+                  "sites pending to visit. Accumulated words size",
+                  sys.getsizeof(parser.sites_content), "bytes.")
         number_visited += 1
         check_if_contained = [data.find(word) for word in words]
         if all(check > -1 for check in check_if_contained):
@@ -103,17 +117,6 @@ def crawler(words, start_url, max_pages=10000, display=True):
         print("SUCCESS:", words, "found at", current_url)
     else:
         print("FAILED: Words never found.")
-
-
-def dump(data, path):
-    with open(path, "w+") as f:
-        d = json.load(f)
-        # BUG: when same key exists in both dicts.
-        d = {**d, **data}
-        f.write(json.dumps(d,
-                           sort_keys=True,
-                           indent=4,
-                           separators=(",", ": ")))
 
 
 if __name__ == '__main__':
