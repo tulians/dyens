@@ -2,6 +2,11 @@
 # Dyens crawler
 # ===================================
 
+"""Crawls websites looking for a set of words given a starting site."""
+
+# Project specific modules
+from processor import Processor
+
 # Built-in modules
 import re
 import sys
@@ -48,7 +53,7 @@ class LinkContentParser(HTMLParser):
                 self.sites_content[self.base_url] = tag
             else:
                 self.sites_content[self.base_url] += " " + tag
-            if sys.getsizeof(self.sites_content) > 10e3:
+            if sys.getsizeof(self.sites_content) > 10e2:
                 self.dump(self.sites_content, args.path)
                 self.sites_content = {}
 
@@ -71,6 +76,8 @@ class LinkContentParser(HTMLParser):
         else:
             return ("", [])
 
+    # TODO: Perform this same task opening the file once? 'r+' doesn't work.
+    # Still it breaks in the json.load.
     def dump(self, data, path):
         with open(path, "r") as f:
             d = json.load(f)
@@ -121,6 +128,10 @@ def crawler(words, start_url, max_pages=10000, display=True):
 
 if __name__ == '__main__':
     if args.start_url and args.words:
-        crawler(args.words, args.start_url)
+        try:
+            crawler(args.words, args.start_url)
+        except KeyboardInterrupt:
+            p = Processor(args.path)
+            print(p.set_freq())
     else:
         print("Not enough arguments.")
