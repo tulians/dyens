@@ -5,6 +5,7 @@
 """Crawls websites looking for a set of words given a starting site."""
 
 # Project specific modules
+from utils import dump_as_json
 from processor import Processor
 
 # Built-in modules
@@ -13,7 +14,7 @@ import sys
 import json
 import time
 import argparse
-from os import path
+from os.path import isfile
 from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -35,9 +36,9 @@ class LinkContentParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
         self.sites_content = {}
-        if not path.isfile(args.path):
+        if not isfile(args.path):
             with open(args.path, "w") as f:
-                f.write(json.dumps(self.sites_content))
+                json.dump(self.sites_content, f)
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -54,7 +55,7 @@ class LinkContentParser(HTMLParser):
             else:
                 self.sites_content[self.base_url] += " " + tag
             if sys.getsizeof(self.sites_content) > 10e2:
-                self.dump(self.sites_content, args.path)
+                dump_as_json(self.sites_content, args.path)
                 self.sites_content = {}
 
     def get_links(self, url):
@@ -62,7 +63,8 @@ class LinkContentParser(HTMLParser):
         self.base_url = url
         try:
             response = urlopen(url)
-        except (URLError, UnicodeEncodeError, BadStatusLine):
+        except (URLError, UnicodeEncodeError, BadStatusLine,
+                ConnectionResetError):
             return ("", [])
         if "text/html" in response.getheader("Content-Type"):
             html_bytes = response.read()
@@ -75,16 +77,6 @@ class LinkContentParser(HTMLParser):
             return (html_string, self.links)
         else:
             return ("", [])
-
-    # TODO: Perform this same task opening the file once? 'r+' doesn't work.
-    # Still it breaks in the json.load.
-    def dump(self, data, path):
-        with open(path, "r") as f:
-            d = json.load(f)
-        with open(path, "w") as f:
-            # BUG: when same key exists in both dicts.
-            d = {**d, **data}
-            f.write(json.dumps(d))
 
 
 def crawler(words, start_url, max_pages=10000, display=True):
@@ -132,6 +124,6 @@ if __name__ == '__main__':
             crawler(args.words, args.start_url)
         except KeyboardInterrupt:
             p = Processor(args.path)
-            print(p.set_freq())
+            word_frequency_per_visited_site = p.set_freq()
     else:
         print("Not enough arguments.")
