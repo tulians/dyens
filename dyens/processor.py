@@ -14,6 +14,7 @@ from os.path import join, split, abspath, isfile
 
 
 class Processor(object):
+    """Parses the tags file and gets word frequency for each website."""
     def __init__(self, path):
         self.path = path
         self.word_frequency = {}

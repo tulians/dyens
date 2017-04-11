@@ -5,8 +5,8 @@
 """Crawls websites looking for a set of words given a starting site."""
 
 # Project specific modules
-from utils import dump_as_json
 from processor import Processor
+from utils import dump_as_json, order_by_frequency
 
 # Built-in modules
 import re
@@ -32,7 +32,6 @@ args = parser.parse_args()
 
 class LinkContentParser(HTMLParser):
     """Returns an HTML file along with the URLs in it."""
-
     def __init__(self):
         HTMLParser.__init__(self)
         self.sites_content = {}
@@ -125,5 +124,8 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             p = Processor(args.path)
             word_frequency_per_visited_site = p.set_freq()
+            print(order_by_frequency(word_frequency_per_visited_site[
+                args.start_url
+            ]))
     else:
         print("Not enough arguments.")

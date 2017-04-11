@@ -3,7 +3,7 @@
 
 # Built-in modules
 import json
-from collections import Counter
+import operator
 
 
 def dump_as_json(data, path):
@@ -17,10 +17,18 @@ def dump_as_json(data, path):
 
 
 def merge(a, b):
+    """Merges content of two dictionaries taking into account their keys."""
     def _add(a, b):
         return a + " " + b
     # Get keys in either dictionary a or b but not both.
     merged = {k: a.get(k, b.get(k)) for k in a.keys() ^ b.keys()}
     # Append the value of those keys in both dictionaries.
-    merged.update({k: _add(A[k], B[k]) for k in a.keys() & b.keys()})
+    merged.update({k: _add(a[k], b[k]) for k in a.keys() & b.keys()})
     return merged
+
+
+def order_by_frequency(d, amount=10):
+    """Orders a dictionary by its values."""
+    sorted_dict = sorted(d.items(), key=operator.itemgetter(1))
+    sorted_dict.reverse()
+    return sorted_dict[:amount]
