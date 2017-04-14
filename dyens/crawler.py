@@ -9,18 +9,23 @@ from processor import Processor
 from utils import dump_as_json, order_by_frequency
 
 # Built-in modules
+import io
 import re
 import sys
 import json
 import time
 import argparse
-from os.path import isfile
+# import matplotlib.pyplot as plt
+# from PIL import Image
+from os import makedirs
+from random import randrange
 from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.request import urlopen
 from html.parser import HTMLParser
 from collections import defaultdict
 from http.client import BadStatusLine
+from os.path import join, split, abspath, isfile, exists
 
 
 parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
@@ -29,15 +34,23 @@ parser.add_argument("path", help="Document in which to save data.")
 parser.add_argument("words", nargs="*", help="Words to look for.")
 args = parser.parse_args()
 
+time_per_site, set_size_instant = [], []
+
 
 class LinkContentParser(HTMLParser):
     """Returns an HTML file along with the URLs in it."""
     def __init__(self):
         HTMLParser.__init__(self)
         self.sites_content = {}
+        self.assets_path = join(split(abspath(args.path))[0], "assets")
+        if not exists(self.assets_path):
+            makedirs(self.assets_path)
         if not isfile(args.path):
             with open(args.path, "w") as f:
                 json.dump(self.sites_content, f)
+        self.image_assets_path = join(self.assets_path, "images")
+        if not exists(self.image_assets_path):
+            makedirs(self.image_assets_path)
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -74,6 +87,15 @@ class LinkContentParser(HTMLParser):
             # Feed the HTML Parser with data to be parsed by handling functs.
             self.feed(html_string)
             return (html_string, self.links)
+        if "image/" in response.getheader("Content-Type"):
+            # TODO: Save a link to these images with the associated path in
+            # a secondary json file.
+            with open(join(self.image_assets_path, str(randrange(1000000))),
+                      "wb") as f:
+                f.write(response.read())
+            # img = io.BytesIO(response.read())
+            # Image.open(img).show()
+            return("", [])
         else:
             return ("", [])
 
@@ -83,6 +105,7 @@ def crawler(words, start_url, max_pages=10000, display=True):
     pages_to_visit, number_visited, previous_time = [start_url], 0, 0
     pages_seen, parser = set(pages_to_visit), LinkContentParser()
     search_start_time = time.time()
+#    time_per_site, set_size_instant = [], []
     while number_visited < max_pages and pages_to_visit:
         current_url = pages_to_visit[0]
         print("Visiting", current_url)
@@ -92,13 +115,18 @@ def crawler(words, start_url, max_pages=10000, display=True):
         data, links = parser.get_links(current_url)
         # Process elapsed time.
         previous_time = time.time() - previous_time
+        # For data visualization.
+        time_per_site.append(previous_time)
+        set_size_instant.append(sys.getsizeof(pages_seen))
+        # Presents time elapsed in console.
         minutes, seconds = divmod((time.time() - search_start_time), 60)
         hours, minutes = divmod(minutes, 60)
         if display:
             print("{:02.0f}:{:02.0f}:{:02.0f}".format(hours, minutes, seconds),
                   "| #", number_visited, "- Visited:", current_url, "in",
                   "{0:.5f}".format(previous_time), "seconds. Set size:",
-                  sys.getsizeof(pages_seen), "bytes.", len(pages_to_visit),
+                  sys.getsizeof(pages_seen), "bytes. Set length:",
+                  len(pages_seen), "elements.", len(pages_to_visit),
                   "sites pending to visit. Accumulated words size",
                   sys.getsizeof(parser.sites_content), "bytes.")
         number_visited += 1
@@ -115,6 +143,12 @@ def crawler(words, start_url, max_pages=10000, display=True):
         print("SUCCESS:", words, "found at", current_url)
     else:
         print("FAILED: Words never found.")
+#    time_vs_number_of_sites(time_per_site)
+
+# TODO: After installing Matplotlib for Python3.X
+# def time_vs_number_of_sites(times):
+#    plt.plot(times)
+#    plt.show()
 
 
 if __name__ == '__main__':
@@ -122,10 +156,11 @@ if __name__ == '__main__':
         try:
             crawler(args.words, args.start_url)
         except KeyboardInterrupt:
+#            time_vs_number_of_sites(time_per_site)
             p = Processor(args.path)
             word_frequency_per_visited_site = p.set_freq()
-            print(order_by_frequency(word_frequency_per_visited_site[
-                args.start_url
-            ]))
+#            print(order_by_frequency(word_frequency_per_visited_site[
+#                args.start_url
+#            ]))
     else:
         print("Not enough arguments.")

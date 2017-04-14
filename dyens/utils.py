@@ -27,8 +27,9 @@ def merge(a, b):
     return merged
 
 
-def order_by_frequency(d, amount=10):
+def order_by_frequency(d, amount=10, high_to_low=True):
     """Orders a dictionary by its values."""
     sorted_dict = sorted(d.items(), key=operator.itemgetter(1))
-    sorted_dict.reverse()
+    if high_to_low:
+        sorted_dict.reverse()
     return sorted_dict[:amount]
