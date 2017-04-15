@@ -9,8 +9,8 @@ from utils import dump_as_json
 # Built-in modules
 import json
 import string
+from os.path import join, isfile
 from collections import defaultdict
-from os.path import join, split, abspath, isfile
 
 
 class Processor(object):
@@ -18,9 +18,9 @@ class Processor(object):
     def __init__(self, path):
         self.path = path
         self.word_frequency = {}
-        with open(self.path, "r") as f:
+        with open(join(self.path, "dump.json"), "r") as f:
             self.words_by_site = json.load(f)
-        self.freqs_file_path = join(split(abspath(self.path))[0], "freqs.json")
+        self.freqs_file_path = join(self.path, "freqs.json")
         if not isfile(self.freqs_file_path):
             with open(self.freqs_file_path, "w") as f:
                 json.dump(self.word_frequency, f)

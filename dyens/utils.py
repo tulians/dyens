@@ -19,7 +19,9 @@ def dump_as_json(data, path):
 def merge(a, b):
     """Merges content of two dictionaries taking into account their keys."""
     def _add(a, b):
-        return a + " " + b
+        if a != b:
+            return a + " " + b
+        return a
     # Get keys in either dictionary a or b but not both.
     merged = {k: a.get(k, b.get(k)) for k in a.keys() ^ b.keys()}
     # Append the value of those keys in both dictionaries.

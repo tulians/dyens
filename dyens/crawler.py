@@ -14,6 +14,7 @@ import re
 import sys
 import json
 import time
+import signal
 import argparse
 # import matplotlib.pyplot as plt
 # from PIL import Image
@@ -25,13 +26,12 @@ from urllib.request import urlopen
 from html.parser import HTMLParser
 from collections import defaultdict
 from http.client import BadStatusLine
-from os.path import join, split, abspath, isfile, exists
+from os.path import join, isfile, exists
 
 
 parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
 parser.add_argument("start_url", help="Base URL to start crawling from.")
-parser.add_argument("path", help="Document in which to save data.")
-parser.add_argument("words", nargs="*", help="Words to look for.")
+parser.add_argument("path", help="Directory in which to save data.")
 args = parser.parse_args()
 
 time_per_site, set_size_instant = [], []
@@ -42,15 +42,21 @@ class LinkContentParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
         self.sites_content = {}
-        self.assets_path = join(split(abspath(args.path))[0], "assets")
+        self.linker = {}
+        self.assets_path = join(args.path, "assets")
         if not exists(self.assets_path):
             makedirs(self.assets_path)
-        if not isfile(args.path):
-            with open(args.path, "w") as f:
-                json.dump(self.sites_content, f)
         self.image_assets_path = join(self.assets_path, "images")
         if not exists(self.image_assets_path):
             makedirs(self.image_assets_path)
+        self.raw_data = join(args.path, "dump.json")
+        if not isfile(self.raw_data):
+            with open(self.raw_data, "w") as f:
+                json.dump(self.sites_content, f)
+        self.linker_path = join(self.image_assets_path, "linker.json")
+        if not isfile(self.linker_path):
+            with open(self.linker_path, "w") as f:
+                json.dump(self.linker, f)
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -67,45 +73,70 @@ class LinkContentParser(HTMLParser):
             else:
                 self.sites_content[self.base_url] += " " + tag
             if sys.getsizeof(self.sites_content) > 10e2:
-                dump_as_json(self.sites_content, args.path)
+                dump_as_json(self.sites_content, self.raw_data)
                 self.sites_content = {}
 
     def get_links(self, url):
         self.links = []
         self.base_url = url
         try:
-            response = urlopen(url)
-        except (URLError, UnicodeEncodeError, BadStatusLine,
-                ConnectionResetError):
-            return ("", [])
-        if "text/html" in response.getheader("Content-Type"):
-            html_bytes = response.read()
-            try:
-                html_string = html_bytes.decode("utf-8")
-            except UnicodeDecodeError:
-                html_string = html_bytes.decode("latin-1")
-            # Feed the HTML Parser with data to be parsed by handling functs.
-            self.feed(html_string)
-            return (html_string, self.links)
-        if "image/" in response.getheader("Content-Type"):
-            # TODO: Save a link to these images with the associated path in
-            # a secondary json file.
-            with open(join(self.image_assets_path, str(randrange(1000000))),
-                      "wb") as f:
-                f.write(response.read())
-            # img = io.BytesIO(response.read())
-            # Image.open(img).show()
-            return("", [])
-        else:
+            with self._Timeout(15):
+                try:
+                    response = urlopen(url)
+                except (URLError, UnicodeEncodeError, BadStatusLine,
+                        ConnectionResetError):
+                    return ("", [])
+                if "text/html" in response.getheader("Content-Type"):
+                    html_bytes = response.read()
+                    try:
+                        html_string = html_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        html_string = html_bytes.decode("latin-1")
+                    # Feed the HTML Parser with data to be parsed by handling
+                    # functs.
+                    self.feed(html_string)
+                    return (html_string, self.links)
+                if "image/" in response.getheader("Content-Type"):
+                    path = join(self.image_assets_path,
+                                str(randrange(1000000)))
+                    with open(path, "wb") as f:
+                        f.write(response.read())
+                    # img = io.BytesIO(response.read())
+                    # Image.open(img).show()
+                    self.linker[url] = path
+                    dump_as_json(self.linker, self.linker_path)
+                    return ("", [])
+                else:
+                    return ("", [])
+        except self._Timeout.Timeout:
+            print("TIMEOUT")
             return ("", [])
 
+    class _Timeout():
+        """Timeout class using ALARM signal."""
+        class Timeout(Exception):
+            pass
 
-def crawler(words, start_url, max_pages=10000, display=True):
+        def __init__(self, sec):
+            self.sec = sec
+
+        def __enter__(self):
+            signal.signal(signal.SIGALRM, self.raise_timeout)
+            signal.alarm(self.sec)
+
+        def __exit__(self, *args):
+            signal.alarm(0)
+
+        def raise_timeout(self, *args):
+            raise self.Timeout()
+
+
+def crawler(start_url, max_pages=10000, display=True):
     """Performs web crawling, returning the site that holds the words."""
     pages_to_visit, number_visited, previous_time = [start_url], 0, 0
     pages_seen, parser = set(pages_to_visit), LinkContentParser()
     search_start_time = time.time()
-#    time_per_site, set_size_instant = [], []
+    time_per_site, set_size_instant = [], []
     while number_visited < max_pages and pages_to_visit:
         current_url = pages_to_visit[0]
         print("Visiting", current_url)
@@ -130,19 +161,12 @@ def crawler(words, start_url, max_pages=10000, display=True):
                   "sites pending to visit. Accumulated words size",
                   sys.getsizeof(parser.sites_content), "bytes.")
         number_visited += 1
-        check_if_contained = [data.find(word) for word in words]
-        if all(check > -1 for check in check_if_contained):
-            break
         # Avoid returning to the same websites. Checks for duplicates
         # with O(1) complexity.
         for link in links:
             if link not in pages_seen:
                 pages_seen.add(link)
                 pages_to_visit.append(link)
-    if number_visited < max_pages:
-        print("SUCCESS:", words, "found at", current_url)
-    else:
-        print("FAILED: Words never found.")
 #    time_vs_number_of_sites(time_per_site)
 
 # TODO: After installing Matplotlib for Python3.X
@@ -152,15 +176,12 @@ def crawler(words, start_url, max_pages=10000, display=True):
 
 
 if __name__ == '__main__':
-    if args.start_url and args.words:
+    if args.start_url:
         try:
-            crawler(args.words, args.start_url)
+            crawler(args.start_url)
         except KeyboardInterrupt:
-#            time_vs_number_of_sites(time_per_site)
+            # time_vs_number_of_sites(time_per_site)
             p = Processor(args.path)
             word_frequency_per_visited_site = p.set_freq()
-#            print(order_by_frequency(word_frequency_per_visited_site[
-#                args.start_url
-#            ]))
     else:
         print("Not enough arguments.")
