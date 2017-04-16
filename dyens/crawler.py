@@ -10,6 +10,7 @@ from utils import dump_as_json, order_by_frequency
 
 # Built-in modules
 import io
+import os
 import re
 import sys
 import json
@@ -131,13 +132,13 @@ class LinkContentParser(HTMLParser):
             raise self.Timeout()
 
 
-def crawler(start_url, max_pages=10000, display=True):
+def crawler(start_url, max_pages=None, display=True):
     """Performs web crawling, returning the site that holds the words."""
     pages_to_visit, number_visited, previous_time = [start_url], 0, 0
     pages_seen, parser = set(pages_to_visit), LinkContentParser()
     search_start_time = time.time()
-    time_per_site, set_size_instant = [], []
-    while number_visited < max_pages and pages_to_visit:
+    # time_per_site, set_size_instant = [], []
+    while pages_to_visit:
         current_url = pages_to_visit[0]
         print("Visiting", current_url)
         pages_to_visit = pages_to_visit[1:]
@@ -146,21 +147,25 @@ def crawler(start_url, max_pages=10000, display=True):
         data, links = parser.get_links(current_url)
         # Process elapsed time.
         previous_time = time.time() - previous_time
-        # For data visualization.
-        time_per_site.append(previous_time)
-        set_size_instant.append(sys.getsizeof(pages_seen))
+        # Data visualization.
+        # time_per_site.append(previous_time)
+        # set_size_instant.append(sys.getsizeof(pages_seen))
         # Presents time elapsed in console.
         minutes, seconds = divmod((time.time() - search_start_time), 60)
         hours, minutes = divmod(minutes, 60)
         if display:
+            _, columns = os.popen('stty size', 'r').read().split()
             print("{:02.0f}:{:02.0f}:{:02.0f}".format(hours, minutes, seconds),
                   "| #", number_visited, "- Visited:", current_url, "in",
                   "{0:.5f}".format(previous_time), "seconds. Set size:",
                   sys.getsizeof(pages_seen), "bytes. Set length:",
                   len(pages_seen), "elements.", len(pages_to_visit),
                   "sites pending to visit. Accumulated words size",
-                  sys.getsizeof(parser.sites_content), "bytes.")
+                  sys.getsizeof(parser.sites_content), "bytes.\n{}".format(
+                      "-" * int(columns)))
         number_visited += 1
+        if max_pages and number_visited >= max_pages:
+            break
         # Avoid returning to the same websites. Checks for duplicates
         # with O(1) complexity.
         for link in links:
