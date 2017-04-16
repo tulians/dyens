@@ -9,8 +9,6 @@ from processor import Processor
 from utils import dump_as_json, order_by_frequency
 
 # Built-in modules
-import io
-import os
 import re
 import sys
 import json
@@ -19,13 +17,12 @@ import signal
 import argparse
 # import matplotlib.pyplot as plt
 # from PIL import Image
-from os import makedirs
 from random import randrange
+from os import makedirs, popen
 from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.request import urlopen
 from html.parser import HTMLParser
-from collections import defaultdict
 from http.client import BadStatusLine
 from os.path import join, isfile, exists
 
@@ -34,8 +31,6 @@ parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
 parser.add_argument("start_url", help="Base URL to start crawling from.")
 parser.add_argument("path", help="Directory in which to save data.")
 args = parser.parse_args()
-
-time_per_site, set_size_instant = [], []
 
 
 class LinkContentParser(HTMLParser):
@@ -102,8 +97,6 @@ class LinkContentParser(HTMLParser):
                                 str(randrange(1000000)))
                     with open(path, "wb") as f:
                         f.write(response.read())
-                    # img = io.BytesIO(response.read())
-                    # Image.open(img).show()
                     self.linker[url] = path
                     dump_as_json(self.linker, self.linker_path)
                     return ("", [])
@@ -137,7 +130,6 @@ def crawler(start_url, max_pages=None, display=True):
     pages_to_visit, number_visited, previous_time = [start_url], 0, 0
     pages_seen, parser = set(pages_to_visit), LinkContentParser()
     search_start_time = time.time()
-    # time_per_site, set_size_instant = [], []
     while pages_to_visit:
         current_url = pages_to_visit[0]
         print("Visiting", current_url)
@@ -147,14 +139,11 @@ def crawler(start_url, max_pages=None, display=True):
         data, links = parser.get_links(current_url)
         # Process elapsed time.
         previous_time = time.time() - previous_time
-        # Data visualization.
-        # time_per_site.append(previous_time)
-        # set_size_instant.append(sys.getsizeof(pages_seen))
         # Presents time elapsed in console.
         minutes, seconds = divmod((time.time() - search_start_time), 60)
         hours, minutes = divmod(minutes, 60)
         if display:
-            _, columns = os.popen('stty size', 'r').read().split()
+            _, columns = popen('stty size', 'r').read().split()
             print("{:02.0f}:{:02.0f}:{:02.0f}".format(hours, minutes, seconds),
                   "| #", number_visited, "- Visited:", current_url, "in",
                   "{0:.5f}".format(previous_time), "seconds. Set size:",
@@ -172,12 +161,6 @@ def crawler(start_url, max_pages=None, display=True):
             if link not in pages_seen:
                 pages_seen.add(link)
                 pages_to_visit.append(link)
-#    time_vs_number_of_sites(time_per_site)
-
-# TODO: After installing Matplotlib for Python3.X
-# def time_vs_number_of_sites(times):
-#    plt.plot(times)
-#    plt.show()
 
 
 if __name__ == '__main__':
@@ -185,7 +168,6 @@ if __name__ == '__main__':
         try:
             crawler(args.start_url)
         except KeyboardInterrupt:
-            # time_vs_number_of_sites(time_per_site)
             p = Processor(args.path)
             word_frequency_per_visited_site = p.set_freq()
     else:
