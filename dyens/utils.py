@@ -4,6 +4,8 @@
 # Built-in modules
 import json
 import operator
+from os import makedirs
+from os.path import join, isfile, exists
 
 
 def dump_as_json(data, path):
@@ -35,3 +37,20 @@ def order_by_frequency(d, amount=10, high_to_low=True):
     if high_to_low:
         sorted_dict.reverse()
     return sorted_dict[:amount]
+
+
+def mkdir(path, name):
+    """Creates a directory with name 'name' under 'path'."""
+    new_directory_path = join(path, name)
+    if not exists(new_directory_path):
+        makedirs(new_directory_path)
+    return new_directory_path
+
+
+def mk_json_file(path, name, content={}):
+    """Creates a json file with name 'name' under 'path' with 'content'."""
+    new_file_path = join(path, name)
+    if not isfile(new_file_path):
+        with open(new_file_path, "w") as f:
+            json.dump(content, f)
+    return new_file_path

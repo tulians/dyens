@@ -6,7 +6,7 @@
 
 # Project specific modules
 from processor import Processor
-from utils import dump_as_json, order_by_frequency
+from utils import dump_as_json, mkdir, mk_json_file
 
 # Built-in modules
 import re
@@ -17,14 +17,14 @@ import signal
 import argparse
 # import matplotlib.pyplot as plt
 # from PIL import Image
+from os import popen
+from os.path import join
 from random import randrange
-from os import makedirs, popen
 from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.request import urlopen
 from html.parser import HTMLParser
-from http.client import BadStatusLine
-from os.path import join, isfile, exists
+from http.client import BadStatusLine, IncompleteRead
 
 
 parser = argparse.ArgumentParser(prog="dyens", description="Dyens CLI")
@@ -39,20 +39,11 @@ class LinkContentParser(HTMLParser):
         HTMLParser.__init__(self)
         self.sites_content = {}
         self.linker = {}
-        self.assets_path = join(args.path, "assets")
-        if not exists(self.assets_path):
-            makedirs(self.assets_path)
-        self.image_assets_path = join(self.assets_path, "images")
-        if not exists(self.image_assets_path):
-            makedirs(self.image_assets_path)
-        self.raw_data = join(args.path, "dump.json")
-        if not isfile(self.raw_data):
-            with open(self.raw_data, "w") as f:
-                json.dump(self.sites_content, f)
-        self.linker_path = join(self.image_assets_path, "linker.json")
-        if not isfile(self.linker_path):
-            with open(self.linker_path, "w") as f:
-                json.dump(self.linker, f)
+        self.assets_path = mkdir(args.path, "assets")
+        self.image_assets_path = mkdir(self.assets_path, "images")
+        self.pdfs_assets_path = mkdir(self.assets_path, "pdfs")
+        self.raw_data = mk_json_file(args.path, "dump.json")
+        self.linker_path = mk_json_file(self.assets_path, "linker.json")
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
@@ -73,10 +64,20 @@ class LinkContentParser(HTMLParser):
                 self.sites_content = {}
 
     def get_links(self, url):
+        """Returns HTML files and downloads other assets."""
+        def _get_and_link_resource(asset_path):
+            """Links downloaded asset name with its soure URL."""
+            path = join(asset_path, str(randrange(1000000)))
+            with open(path, "wb") as f:
+                f.write(response.read())
+            self.linker[url] = path
+            dump_as_json(self.linker, self.linker_path)
+            return ("", [])
+
         self.links = []
         self.base_url = url
         try:
-            with self._Timeout(15):
+            with self._Timeout(120):
                 try:
                     response = urlopen(url)
                 except (URLError, UnicodeEncodeError, BadStatusLine,
@@ -92,14 +93,13 @@ class LinkContentParser(HTMLParser):
                     # functs.
                     self.feed(html_string)
                     return (html_string, self.links)
-                if "image/" in response.getheader("Content-Type"):
-                    path = join(self.image_assets_path,
-                                str(randrange(1000000)))
-                    with open(path, "wb") as f:
-                        f.write(response.read())
-                    self.linker[url] = path
-                    dump_as_json(self.linker, self.linker_path)
-                    return ("", [])
+                elif "image/" in response.getheader("Content-Type"):
+                    return _get_and_link_resource(self.image_assets_path)
+                elif "application/pdf" in response.getheader("Content-Type"):
+                    try:
+                        return _get_and_link_resource(self.pdfs_assets_path)
+                    except IncompleteRead:
+                        return ("", [])
                 else:
                     return ("", [])
         except self._Timeout.Timeout:

@@ -4,7 +4,7 @@
 """Gets word frequency from crawled websites."""
 
 # Project specific modules
-from utils import dump_as_json
+from utils import dump_as_json, mkdir, mk_json_file
 
 # Built-in modules
 import json
@@ -20,10 +20,7 @@ class Processor(object):
         self.word_frequency = {}
         with open(join(self.path, "dump.json"), "r") as f:
             self.words_by_site = json.load(f)
-        self.freqs_file_path = join(self.path, "freqs.json")
-        if not isfile(self.freqs_file_path):
-            with open(self.freqs_file_path, "w") as f:
-                json.dump(self.word_frequency, f)
+        self.freqs_file_path = mk_json_file(self.path, "freqs.json")
 
     def set_freq(self):
         """Returs a dictionary with the word frequency for each website."""
